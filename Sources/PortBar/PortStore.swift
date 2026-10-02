@@ -20,6 +20,12 @@ final class PortStore: ObservableObject {
     /// Processes that ignored SIGTERM — the row offers a force kill instead.
     @Published private(set) var stubborn: Set<Int32> = []
     @Published private(set) var banner: Banner?
+    /// Rows showing their detail section; kept here so it survives refreshes.
+    @Published var expanded: Set<Int32> = []
+    /// Bumped whenever the panel opens, so the view can move keyboard focus to the search field.
+    @Published private(set) var focusToken = 0
+
+    func focusSearch() { focusToken += 1 }
 
     var onUpdate: (() -> Void)?
     private var bannerTask: Task<Void, Never>?
