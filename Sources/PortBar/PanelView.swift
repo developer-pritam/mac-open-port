@@ -93,7 +93,7 @@ private struct ListHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-/// Height of everything that isn't the list (header, search, filters, footer).
+/// Height of everything that isn't the list (header, update banner, search, filters, footer).
 private struct ChromeHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value += nextValue() }
@@ -107,12 +107,15 @@ private extension View {
 
 struct PanelView: View {
     @ObservedObject var store: PortStore
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var updater: Updater
     let close: () -> Void
     /// Reports the panel's natural height so the window can shrink to fit (short when there's little to show).
     let onHeightChange: (CGFloat) -> Void
     @State private var confirmStopAll = false
     @State private var listHeight: CGFloat = 0
     @State private var chromeHeight: CGFloat = 180
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -121,6 +124,17 @@ struct PanelView: View {
                 .padding(.horizontal, 18)
                 .padding(.top, 16)
                 .padding(.bottom, 12)
+                .background(WindowDragArea())
+                .overlay(alignment: .top) {
+                    // Grabber hint: the header drags the panel.
+                    Capsule().fill(Color.primary.opacity(0.18)).frame(width: 34, height: 4).padding(.top, 6)
+                        .allowsHitTesting(false)
+                }
+            if let release = updater.availableRelease {
+                updateBanner(release)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 10)
+            }
             searchField
                 .padding(.horizontal, 14)
             filterChips
@@ -164,12 +178,32 @@ struct PanelView: View {
                 .rotationEffect(.degrees(store.isScanning ? 360 : 0))
                 .animation(store.isScanning ? .linear(duration: 0.6) : .default, value: store.isScanning)
             Menu {
-                Toggle("Show macOS & app ports", isOn: $store.showSystem)
-                Toggle("Launch at login", isOn: Binding(get: { store.launchAtLogin }, set: { store.launchAtLogin = $0 }))
+                Section("Settings") {
+                    Toggle("Show Status Bar Icon", isOn: Binding(get: { settings.showStatusBarIcon }, set: { visible in
+                        settings.showStatusBarIcon = visible
+                        if !visible { store.show("Menu bar icon hidden. \(settings.reopenHint)") }
+                    }))
+                    Picker("Open Shortcut", selection: $settings.shortcut) {
+                        ForEach(Shortcut.allCases) { Text($0.title).tag($0) }
+                    }
+                    Toggle("Show macOS & App Ports", isOn: $store.showSystem)
+                    Toggle("Launch at Login", isOn: Binding(get: { store.launchAtLogin }, set: { store.launchAtLogin = $0 }))
+                }
+                Section("Updates") {
+                    if let release = updater.availableRelease {
+                        Button("Install PortBar \(release.version)…") { Task { await updater.install(release) } }
+                    } else {
+                        Button(updater.state == .checking ? "Checking…" : "Check for Updates…") {
+                            Task { await updater.check(userInitiated: true) }
+                        }
+                        .disabled(updater.state == .checking || updater.state == .installing)
+                    }
+                    Toggle("Check Automatically", isOn: $settings.autoCheckUpdates)
+                }
                 Divider()
                 Button("PortBar Website") { openURL("https://portbar.developerpritam.in") }
                 Button("Source on GitHub") { openURL("https://github.com/developer-pritam/mac-open-port") }
-                Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")")
+                Text("Version \(updater.currentVersion)")
                 Divider()
                 Button("Quit PortBar") { NSApp.terminate(nil) }
                     .keyboardShortcut("q")
@@ -185,6 +219,39 @@ struct PanelView: View {
         }
     }
 
+    private func updateBanner(_ release: Updater.Release) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 15))
+                .foregroundStyle(.blue)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("PortBar \(release.version) is available").font(.system(size: 12, weight: .semibold))
+                Text("You have \(updater.currentVersion)").font(.system(size: 10.5)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if updater.state == .installing {
+                ProgressView().controlSize(.small)
+            } else {
+                Button("Release notes") { NSWorkspace.shared.open(release.pageURL) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                Button { Task { await updater.install(release) } } label: {
+                    Text("Install")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.blue.gradient))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .glassCard(radius: 12, highlighted: true)
+    }
+
     private func openURL(_ string: String) {
         if let url = URL(string: string) { NSWorkspace.shared.open(url) }
     }
@@ -197,6 +264,14 @@ struct PanelView: View {
             TextField("Search port, process or folder", text: $store.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
+                .focused($searchFocused)
+                // Return opens the top match in the browser.
+                .onSubmit {
+                    if let port = store.visible.first?.ports.first, let url = URL(string: "http://localhost:\(port)") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .onChange(of: store.focusToken) { searchFocused = true }
             if !store.query.isEmpty {
                 Button { store.query = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
@@ -348,10 +423,10 @@ struct ProcessRow: View {
     let process: PortProcess
     @ObservedObject var store: PortStore
     @State private var hover = false
-    @State private var expanded = false
     @State private var confirming = false
 
     private var p: PortProcess { process }
+    private var expanded: Bool { store.expanded.contains(p.pid) }
     private var tint: Color { p.launcher.kind.tint }
 
     var body: some View {
@@ -424,7 +499,11 @@ struct ProcessRow: View {
         .glassCard(highlighted: hover || expanded)
         .contentShape(Rectangle())
         .onHover { hover = $0 }
-        .onTapGesture { withAnimation(.snappy(duration: 0.22)) { expanded.toggle() } }
+        .onTapGesture {
+            withAnimation(.snappy(duration: 0.22)) {
+                if expanded { store.expanded.remove(p.pid) } else { store.expanded.insert(p.pid) }
+            }
+        }
         .contextMenu { contextMenu }
     }
 
@@ -586,4 +665,15 @@ struct ProcessRow: View {
         default: "\(s / 86400)d \(s % 86400 / 3600)h"
         }
     }
+}
+
+/// Lets the panel be dragged by the area it sits behind (the header), while buttons on top keep working.
+struct WindowDragArea: NSViewRepresentable {
+    final class DragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+        override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+    }
+
+    func makeNSView(context: Context) -> NSView { DragView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
