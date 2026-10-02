@@ -17,9 +17,12 @@ PortBar lives in your menu bar and shows everything listening on your Mac: which
 - **See the project** — every port shows the folder it was started from; reveal it in Finder or open `localhost:<port>` in your browser.
 - **Spot exposed ports** — servers listening on all interfaces get a `network` tag.
 - **Live count in the menu bar** — the icon shows how many ports are open.
+- **Open from anywhere** — press **⌃⌥P** (configurable) to open the panel with the search field focused; Return opens the top match in your browser.
+- **Hide the menu bar icon** — turn off *Show Status Bar Icon* and use the shortcut instead, or open PortBar from Spotlight to bring the panel back.
 - **Search & filter** — by port, process, folder, or launcher type. macOS and app-helper ports are hidden by default.
-- **Liquid Glass panel** — native glass on macOS 26 (frosted blur on older versions), light and dark, sizes itself to its content.
-- **Tiny & private** — ~1 MB universal app, no dependencies, no permissions, no network calls, no telemetry.
+- **Liquid Glass panel** — native glass on macOS 26 (frosted blur on older versions), light and dark, sizes itself to its content. Drag it by the header to keep it open where you want it.
+- **Built-in updates** — *Check for Updates…* (and an optional daily check) installs new GitHub releases in place and relaunches.
+- **Tiny & private** — ~1 MB universal app, no dependencies, no permissions, no telemetry. The only network request is the optional update check to GitHub.
 
 ---
 
@@ -37,7 +40,7 @@ No special permissions are needed. PortBar reads the same information as `lsof` 
 1. Download `PortBar.zip` from the [Releases](../../releases) page.
 2. Unzip and drag **PortBar.app** to `/Applications`.
 3. Open it. If macOS blocks it, go to **System Settings → Privacy & Security** and click **Open Anyway** (unsigned app — only needed once).
-4. Click the terminal icon in your menu bar. Turn on **Launch at login** from the `⋯` menu.
+4. Click the terminal icon in your menu bar, or press **⌃⌥P**. Settings (status bar icon, shortcut, launch at login, updates) live in the `⋯` menu.
 
 To uninstall: choose **Quit PortBar** from the `⋯` menu, then move `PortBar.app` to Trash.
 
@@ -89,7 +92,10 @@ PortBar/
 │   ├── AppDelegate.swift     # Status item, glass panel lifecycle, menu bar glyph
 │   ├── PortStore.swift       # Observable state, filtering, stop/force-kill, launch at login
 │   ├── PortScanner.swift     # lsof/ps parsing, launcher detection
-│   └── PanelView.swift       # SwiftUI panel: header, search, filters, rows
+│   ├── PanelView.swift       # SwiftUI panel: header, search, filters, rows, settings menu
+│   ├── Settings.swift        # Status bar icon, shortcut and update preferences
+│   ├── HotKey.swift          # Global shortcut (Carbon RegisterEventHotKey, no permissions)
+│   └── Updater.swift         # GitHub Releases update check + in-place install
 ├── Resources/AppIcon.icns
 ├── docs/                     # GitHub Pages website
 ├── scripts/
@@ -115,7 +121,11 @@ PortBar/
 
 **Stopping** — `kill(pid, SIGTERM)`, then polls for up to 1.5 s. Processes that survive are offered a SIGKILL.
 
-**Panel** — a borderless, non-activating `NSPanel` at status-bar level hosting SwiftUI via `NSHostingView`, inside an `NSGlassEffectView` on macOS 26 (`NSVisualEffectView` before that). The SwiftUI content reports its natural height and the panel resizes to fit, anchored under the menu bar.
+**Panel** — a borderless, non-activating `NSPanel` at status-bar level. A plain container holds an `NSGlassEffectView` (macOS 26; `NSVisualEffectView` before that) and the `NSHostingView` side by side, both autoresizing with the window. The SwiftUI content reports its natural height and the panel resizes to fit, anchored under the menu bar; the list gets whatever height the header and footer leave and scrolls past that.
+
+**Shortcut** — Carbon `RegisterEventHotKey`, which needs no Accessibility permission. Re-launching the app (`applicationShouldHandleReopen`) also opens the panel, so it's reachable with the icon hidden.
+
+**Updates** — `GET api.github.com/repos/developer-pritam/mac-open-port/releases/latest`, compare the tag with `CFBundleShortVersionString`, download the release's `PortBar.zip`, unzip with `ditto`, verify the bundle identifier, swap it in with `FileManager.replaceItemAt`, and relaunch.
 
 ---
 
