@@ -93,19 +93,30 @@ private struct ListHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-struct PanelView: View {
-    /// The list scrolls past this; together with the header and footer it keeps the panel under ~600pt.
-    static let maxListHeight: CGFloat = 430
+/// Height of everything that isn't the list (header, search, filters, footer).
+private struct ChromeHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value += nextValue() }
+}
 
+private extension View {
+    func reportChromeHeight() -> some View {
+        background(GeometryReader { g in Color.clear.preference(key: ChromeHeightKey.self, value: g.size.height) })
+    }
+}
+
+struct PanelView: View {
     @ObservedObject var store: PortStore
     let close: () -> Void
     /// Reports the panel's natural height so the window can shrink to fit (short when there's little to show).
     let onHeightChange: (CGFloat) -> Void
     @State private var confirmStopAll = false
     @State private var listHeight: CGFloat = 0
+    @State private var chromeHeight: CGFloat = 180
 
     var body: some View {
         VStack(spacing: 0) {
+            VStack(spacing: 0) {
             header
                 .padding(.horizontal, 18)
                 .padding(.top, 16)
@@ -115,14 +126,18 @@ struct PanelView: View {
             filterChips
                 .padding(.top, 10)
                 .padding(.bottom, 8)
+            }
+            .reportChromeHeight()
             list
             footer
+                .reportChromeHeight()
         }
+        .onPreferenceChange(ChromeHeightKey.self) { chromeHeight = $0 }
         .frame(width: AppDelegate.size.width)
         .fixedSize(horizontal: false, vertical: true)
         .background(GeometryReader { g in Color.clear.preference(key: HeightKey.self, value: g.size.height) })
         .onPreferenceChange(HeightKey.self) { onHeightChange($0) }
-        .frame(maxHeight: .infinity, alignment: .top)
+        .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
         .overlay(alignment: .bottom) { bannerView }
         .animation(.snappy(duration: 0.25), value: store.banner)
     }
@@ -260,7 +275,8 @@ struct PanelView: View {
                 .background(GeometryReader { g in Color.clear.preference(key: ListHeightKey.self, value: g.size.height) })
             }
             .scrollIndicators(.never)
-            .frame(height: min(listHeight, Self.maxListHeight))
+            // The list gets whatever the header and footer leave of the panel's maximum height, then scrolls.
+            .frame(height: min(listHeight, max(120, AppDelegate.size.height - chromeHeight)))
             .onPreferenceChange(ListHeightKey.self) { listHeight = $0 }
         }
     }

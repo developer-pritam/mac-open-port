@@ -14,7 +14,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let store = PortStore()
     private var statusItem: NSStatusItem!
     private var panel: GlassPanel!
-    private var hosting: NSView!
     private var clickMonitor: Any?
     private var keyMonitor: Any?
     private var timer: Timer?
@@ -70,26 +69,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.delegate = self
 
         let radius: CGFloat = 22
-        let hosting = NSHostingView(rootView: PanelView(
-            store: store,
-            close: { [weak self] in self?.hidePanel() },
-            onHeightChange: { [weak self] h in self?.resizePanel(to: h) }
-        ))
-        hosting.frame = NSRect(origin: .zero, size: Self.size)
-        hosting.sizingOptions = []
-        // Clip content to the panel's rounded shape so nothing pokes past the glass corners.
-        hosting.wantsLayer = true
-        hosting.layer?.cornerRadius = radius
-        hosting.layer?.cornerCurve = .continuous
-        hosting.layer?.masksToBounds = true
-        self.hosting = hosting
+        // A plain container that always matches the window; the glass and the SwiftUI content are siblings inside it,
+        // both autoresizing, so the content can never end up offset from the window.
+        let container = NSView(frame: NSRect(origin: .zero, size: Self.size))
+        container.autoresizesSubviews = true
+
+        let background: NSView
         if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView(frame: hosting.frame)
+            let glass = NSGlassEffectView(frame: container.bounds)
             glass.cornerRadius = radius
-            glass.contentView = hosting
-            panel.contentView = glass
+            background = glass
         } else {
-            let blur = NSVisualEffectView(frame: hosting.frame)
+            let blur = NSVisualEffectView(frame: container.bounds)
             blur.material = .hudWindow
             blur.blendingMode = .behindWindow
             blur.state = .active
@@ -97,9 +88,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             blur.layer?.cornerRadius = radius
             blur.layer?.cornerCurve = .continuous
             blur.layer?.masksToBounds = true
-            blur.addSubview(hosting)
-            panel.contentView = blur
+            background = blur
         }
+        background.autoresizingMask = [.width, .height]
+        container.addSubview(background)
+
+        let hosting = NSHostingView(rootView: PanelView(
+            store: store,
+            close: { [weak self] in self?.hidePanel() },
+            onHeightChange: { [weak self] h in self?.resizePanel(to: h) }
+        ))
+        hosting.frame = container.bounds
+        hosting.autoresizingMask = [.width, .height]
+        hosting.sizingOptions = []
+        // Clip content to the rounded shape so nothing pokes past the glass corners.
+        hosting.wantsLayer = true
+        hosting.layer?.cornerRadius = radius
+        hosting.layer?.cornerCurve = .continuous
+        hosting.layer?.masksToBounds = true
+        container.addSubview(hosting)
+
+        panel.contentView = container
         return panel
     }
 
@@ -153,15 +162,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    /// The glass view doesn't resize its content view, so the SwiftUI content is sized by hand on every change;
-    /// otherwise it keeps its old height (cropped at the top, empty glass at the bottom).
     private func applyFrame(_ frame: NSRect) {
-        panel.setFrame(frame, display: false)
-        hosting.frame = panel.contentView?.bounds ?? NSRect(origin: .zero, size: frame.size)
-        panel.contentView?.needsLayout = true
-        panel.displayIfNeeded()
-        // The window server caches the shadow shape; refresh it or the old outline shows around the corners.
-        panel.invalidateShadow()
+        panel.setFrame(frame, display: true)
+        // The window server caches the shadow shape; refresh it after layout or the old outline shows at the corners.
+        DispatchQueue.main.async { self.panel.invalidateShadow() }
     }
 
     /// Menu bar glyph: a terminal window with a ":" prompt and cursor (matches the app icon). Template, so macOS tints it.
