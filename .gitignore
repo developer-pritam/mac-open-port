@@ -1,0 +1,28 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# App bundle output
+build/
+
+# Distribution
+dist/
+
+# Node (web dashboard)
+node_modules/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
