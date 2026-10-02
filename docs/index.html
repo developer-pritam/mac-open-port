@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PortBar — Every open port on your Mac, one click away</title>
+  <meta name="description" content="PortBar lives in your macOS menu bar and shows every open port: which process, which project, and who started it — you, your editor, or an AI coding agent. Stop anything in two clicks. Free, ~1 MB." />
+  <meta property="og:title" content="PortBar" />
+  <meta property="og:description" content="Every open port on your Mac — which process, which project, who started it. Stop anything in two clicks." />
+  <meta property="og:image" content="https://portbar.developerpritam.in/assets/icon.png" />
+  <meta property="og:url" content="https://portbar.developerpritam.in" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="assets/icon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+
+  <!-- Download URL: /releases/latest/download/PortBar.zip — always points to the newest release -->
+
+  <style>
+    /* ── Reset & base ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #09090b;
+      --surface:   #18181b;
+      --surface2:  #27272a;
+      --border:    rgba(255,255,255,0.08);
+      --text:      #fafafa;
+      --muted:     #a1a1aa;
+      --sky:       #38bdf8;
+      --violet:    #a78bfa;
+      --pink:      #f472b6;
+      --green:     #4ade80;
+      --orange:    #fb923c;
+      --red:       #f87171;
+      --grad:      linear-gradient(135deg, #0ea5e9 0%, #8b5cf6 100%);
+      --radius:    14px;
+      --nav-h:     64px;
+      --mono:      ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+    }
+
+    html { scroll-behavior: smooth; overflow-x: clip; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+
+    /* ── Utility ────────────────────────────────────────────────────────── */
+    .grad-text {
+      background: var(--grad);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .section { padding: 96px 24px; max-width: 1100px; margin: 0 auto; }
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--sky);
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+    .section-sub {
+      margin-top: 14px;
+      font-size: 17px;
+      color: var(--muted);
+      max-width: 580px;
+    }
+    .full-divider { height: 1px; background: var(--border); max-width: 1100px; margin: 0 auto; }
+
+    /* ── Nav ────────────────────────────────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--nav-h);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      background: rgba(9,9,11,0.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      z-index: 100;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+    .nav-logo img { width: 30px; height: 30px; }
+    .nav-links { display: flex; align-items: center; gap: 10px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      border: none;
+      white-space: nowrap;
+    }
+    .btn-ghost { background: transparent; color: var(--muted); }
+    .btn-ghost:hover { color: var(--text); background: var(--surface); }
+    .btn-primary { background: var(--grad); color: #fff; }
+    .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-outline:hover { background: var(--surface); border-color: rgba(255,255,255,0.18); }
+
+    /* ── Hero ───────────────────────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: calc(var(--nav-h) + 60px) 24px 80px;
+      max-width: 1100px;
+      margin: 0 auto;
+      gap: 56px;
+    }
+    .hero-content { flex: 1; min-width: 0; }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: rgba(56,189,248,0.12);
+      border: 1px solid rgba(56,189,248,0.25);
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--sky);
+      margin-bottom: 24px;
+    }
+    .hero-badge span { width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 8px var(--green); }
+    .hero-title { font-size: clamp(38px, 6vw, 66px); font-weight: 800; line-height: 1.08; letter-spacing: -0.03em; }
+    .hero-sub { margin-top: 20px; font-size: 18px; color: var(--muted); max-width: 480px; line-height: 1.65; }
+    .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 36px; }
+    .hero-cta .btn { font-size: 15px; padding: 12px 22px; }
+    .hero-meta { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--muted); }
+    .hero-meta span::before { content: "✓"; color: var(--green); margin-right: 6px; font-weight: 700; }
+
+    /* ── Mockup: menu bar + glass panel ─────────────────────────────────── */
+    .mockup-wrap { flex: 0 0 440px; position: relative; }
+    .mockup-glow {
+      position: absolute; inset: 10% -10% -5%;
+      background: radial-gradient(closest-side, rgba(139,92,246,0.35), transparent),
+                  radial-gradient(closest-side at 30% 70%, rgba(14,165,233,0.3), transparent);
+      filter: blur(40px);
+      z-index: 0;
+    }
+    .desktop {
+      position: relative;
+      z-index: 1;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background:
+        radial-gradient(circle at 15% 85%, #f472b6 0, transparent 38%),
+        radial-gradient(circle at 85% 70%, #0ea5e9 0, transparent 42%),
+        radial-gradient(circle at 60% 20%, #8b5cf6 0, transparent 45%),
+        linear-gradient(160deg, #1e1b4b, #0f172a);
+      padding-bottom: 26px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+    }
+    .menubar {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 16px;
+      padding: 0 14px;
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      font-size: 12.5px;
+      font-weight: 500;
+    }
+    .menubar svg { display: block; }
+    .mb-item { display: flex; align-items: center; gap: 4px; color: #fff; }
+    .mb-portbar { padding: 2px 7px; border-radius: 5px; background: rgba(255,255,255,0.2); font-variant-numeric: tabular-nums; }
+
+    .glass {
+      margin: 6px 14px 0 auto;
+      width: calc(100% - 28px);
+      max-width: 400px;
+      border-radius: 22px;
+      background: rgba(30,30,40,0.42);
+      backdrop-filter: blur(28px) saturate(160%);
+      -webkit-backdrop-filter: blur(28px) saturate(160%);
+      border: 1px solid rgba(255,255,255,0.16);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 20px 50px rgba(0,0,0,0.45);
+      padding: 14px 12px 10px;
+      font-size: 12px;
+    }
+    .g-head { display: flex; align-items: center; gap: 10px; padding: 0 4px 10px; }
+    .g-head img { width: 36px; height: 36px; margin: -3px; }
+    .g-title { font-weight: 600; font-size: 14px; line-height: 1.2; }
+    .g-sub { color: rgba(255,255,255,0.6); font-size: 11px; }
+    .g-btns { margin-left: auto; display: flex; gap: 6px; }
+    .g-btns i { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.08); display: grid; place-items: center; font-style: normal; color: rgba(255,255,255,0.7); font-size: 12px; }
+    .g-search { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.45); }
+    .g-chips { display: flex; gap: 5px; margin: 9px 0 8px; flex-wrap: wrap; }
+    .g-chip { padding: 3px 9px; border-radius: 99px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); font-size: 11px; font-weight: 500; }
+    .g-chip b { opacity: 0.6; font-weight: 600; margin-left: 3px; }
+    .g-chip.on { background: linear-gradient(#3b82f6, #2563eb); border-color: transparent; box-shadow: 0 2px 8px rgba(59,130,246,0.45); }
+    .g-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px; border-radius: 13px; margin-bottom: 6px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+    .g-port {
+      flex: 0 0 52px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+      font: 700 15px/1 -apple-system, "SF Pro Rounded", sans-serif; font-variant-numeric: tabular-nums;
+    }
+    .g-port.small { font-size: 12.5px; }
+    .g-info { min-width: 0; flex: 1; }
+    .g-name { font-weight: 600; font-size: 12.5px; display: flex; gap: 6px; align-items: center; }
+    .g-net { font-size: 9px; font-weight: 600; color: var(--orange); background: rgba(251,146,60,0.15); padding: 0 5px; border-radius: 99px; }
+    .g-path { font: 10.5px var(--mono); color: rgba(255,255,255,0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .g-meta { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: center; margin-top: 2px; font-size: 10px; color: rgba(255,255,255,0.55); }
+    .g-badge { font-size: 10px; font-weight: 600; padding: 0 6px; border-radius: 99px; white-space: nowrap; }
+    .k-agent { color: #c4b5fd; background: rgba(167,139,250,0.18); }
+    .k-term { color: #86efac; background: rgba(74,222,128,0.16); }
+    .k-editor { color: #93c5fd; background: rgba(96,165,250,0.18); }
+    .k-svc { color: #fdba74; background: rgba(251,146,60,0.16); }
+    .p-agent { color: #c4b5fd; background: rgba(167,139,250,0.14); border: 1px solid rgba(167,139,250,0.28); }
+    .p-term { color: #86efac; background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.26); }
+    .p-svc { color: #fdba74; background: rgba(251,146,60,0.12); border: 1px solid rgba(251,146,60,0.26); }
+    .g-stop { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.07); display: grid; place-items: center; }
+    .g-stop::after { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--red); }
+    .g-confirm { flex: 0 0 auto; padding: 4px 10px; border-radius: 99px; background: linear-gradient(#ef4444, #dc2626); font-weight: 600; font-size: 11px; box-shadow: 0 2px 8px rgba(239,68,68,0.45); animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 50% { box-shadow: 0 2px 14px rgba(239,68,68,0.75); } }
+    .g-foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 6px 0; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 4px; color: rgba(255,255,255,0.4); font-size: 10.5px; }
+    .g-foot b { color: var(--red); background: rgba(248,113,113,0.12); padding: 3px 9px; border-radius: 99px; font-weight: 600; }
+
+    /* ── Problem strip ──────────────────────────────────────────────────── */
+    .problem {
+      max-width: 820px; margin: 0 auto; padding: 72px 24px; text-align: center;
+    }
+    .terminal-line {
+      display: inline-block;
+      font: 14px/1.7 var(--mono);
+      text-align: left;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      color: var(--muted);
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    .terminal-line .err { color: var(--red); }
+    .terminal-line .cmd { color: var(--text); }
+    .problem p { margin-top: 22px; font-size: 19px; color: var(--muted); }
+    .problem p strong { color: var(--text); }
+
+    /* ── Features (Bento) ───────────────────────────────────────────────── */
+    .bento { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 52px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 26px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .card:hover { border-color: rgba(255,255,255,0.16); transform: translateY(-2px); }
+    .card.wide { grid-column: span 2; }
+    .card-icon {
+      width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center;
+      font-size: 19px; margin-bottom: 16px;
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+    }
+    .card h3 { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 8px; }
+    .card p { font-size: 14.5px; color: var(--muted); line-height: 1.6; }
+    .card .glow { position: absolute; width: 260px; height: 260px; border-radius: 50%; filter: blur(70px); opacity: 0.18; right: -80px; top: -80px; pointer-events: none; }
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .badge { font-size: 12.5px; font-weight: 600; padding: 4px 11px; border-radius: 99px; }
+    .flow { display: flex; align-items: center; gap: 8px; margin-top: 18px; font-size: 12px; font-weight: 600; flex-wrap: wrap; }
+    .flow span { padding: 4px 10px; border-radius: 99px; }
+    .flow .arrow { color: var(--muted); padding: 0; }
+    .mini-path { margin-top: 16px; font: 12.5px var(--mono); color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 9px; padding: 8px 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-row { display: flex; gap: 28px; margin-top: 20px; flex-wrap: wrap; }
+    .stat b { display: block; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+    .stat span { font-size: 12.5px; color: var(--muted); }
+
+    /* ── How it works ───────────────────────────────────────────────────── */
+    .steps-wrap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 48px; }
+    .step { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 26px; }
+    .step-num {
+      width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+      background: var(--grad); font-weight: 800; font-size: 15px; margin-bottom: 16px;
+    }
+    .step h3 { font-size: 17px; margin-bottom: 6px; }
+    .step p { font-size: 14.5px; color: var(--muted); }
+
+    /* ── Privacy ────────────────────────────────────────────────────────── */
+    .privacy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 44px; }
+    .privacy-card { display: flex; gap: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 24px; }
+    .privacy-card .pi { flex: 0 0 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.22); }
+    .privacy-card h3 { font-size: 16px; margin-bottom: 4px; }
+    .privacy-card p { font-size: 14px; color: var(--muted); }
+
+    /* ── Download ───────────────────────────────────────────────────────── */
+    .dl-section { text-align: center; max-width: 640px; margin: 0 auto; }
+    .dl-icon { width: 112px; height: 112px; margin: 0 auto 18px; filter: drop-shadow(0 18px 36px rgba(139,92,246,0.35)); }
+    .dl-title { font-size: clamp(28px, 4vw, 40px); font-weight: 800; letter-spacing: -0.02em; }
+    .dl-sub { color: var(--muted); margin-top: 8px; font-size: 16px; }
+    .dl-btn-wrap { margin-top: 28px; }
+    .dl-btn-wrap .btn { font-size: 16px; padding: 14px 28px; border-radius: 12px; }
+    .dl-req { margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+    /* ── Gatekeeper callout ─────────────────────────────────────────────── */
+    .gatekeeper-callout {
+      display: none;
+      text-align: left;
+      margin-top: 32px;
+      background: rgba(251,146,60,0.07);
+      border: 1px solid rgba(251,146,60,0.3);
+      border-radius: 16px;
+      padding: 22px 24px;
+      scroll-margin-top: calc(var(--nav-h) + 20px);
+    }
+    .gatekeeper-callout.visible { display: block; animation: fadeIn 0.35s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .gk-header { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; }
+    .gk-intro { margin-top: 10px; font-size: 14px; color: var(--muted); }
+    .gk-steps { margin-top: 16px; display: grid; gap: 12px; }
+    .gk-step { display: flex; gap: 12px; align-items: flex-start; }
+    .gk-n { flex: 0 0 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: rgba(251,146,60,0.18); color: var(--orange); }
+    .gk-text { font-size: 14px; color: var(--muted); }
+    .gk-text strong { color: var(--text); }
+    .gk-quote { display: inline-block; margin-top: 6px; font-style: italic; color: var(--text); background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 6px; }
+
+    .install-steps { margin-top: 36px; text-align: left; display: grid; gap: 12px; }
+    .install-step { display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+    .install-n { flex: 0 0 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-weight: 800; font-size: 13px; background: var(--grad); }
+    .install-text { font-size: 14.5px; color: var(--muted); }
+    .install-text strong { color: var(--text); }
+    .gk-learn-more { display: inline-block; margin-top: 4px; color: var(--sky); font-size: 13px; }
+
+    /* ── Footer ─────────────────────────────────────────────────────────── */
+    footer {
+      max-width: 1100px; margin: 0 auto; padding: 32px 24px 48px;
+      border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap;
+      font-size: 14px; color: var(--muted);
+    }
+    .footer-left { display: flex; align-items: center; gap: 10px; }
+    .footer-left img { width: 28px; height: 28px; }
+    .footer-left strong { color: var(--text); }
+    .footer-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .footer-link { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 9px; border: 1px solid var(--border); font-size: 13px; transition: background 0.15s ease; }
+    .footer-link:hover { background: var(--surface); }
+    .footer-link.orange { color: var(--orange); }
+    .footer-link.blue { color: var(--sky); }
+
+    /* ── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 960px) {
+      .hero { flex-direction: column; min-height: auto; text-align: left; }
+      .mockup-wrap { flex: none; width: 100%; max-width: 460px; }
+      .bento { grid-template-columns: 1fr 1fr; }
+      .card.wide { grid-column: span 2; }
+    }
+    @media (max-width: 640px) {
+      nav { padding: 0 16px; }
+      .nav-links .btn-ghost { display: none; }
+      .hero { padding: calc(var(--nav-h) + 36px) 16px 56px; }
+      .section { padding: 72px 16px; }
+      .bento, .steps-wrap, .privacy-grid { grid-template-columns: 1fr; }
+      .card.wide { grid-column: auto; }
+      .menubar .mb-hide { display: none; }
+      .mockup-glow { inset: 10% 0 -5%; }
+      footer { padding: 28px 16px 40px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-logo">
+    <img src="assets/icon.png" alt="PortBar icon" />
+    PortBar
+  </a>
+  <div class="nav-links">
+    <a href="https://github.com/developer-pritam/port-bar" class="btn btn-ghost" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+    <a href="#download" class="btn btn-primary">Download free</a>
+  </div>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────────── -->
+<div class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">
+      <span></span>
+      macOS 14+ &nbsp;·&nbsp; Free &nbsp;·&nbsp; v1.0
+    </div>
+    <h1 class="hero-title">
+      Every open port.<br />
+      <span class="grad-text">One click away.</span>
+    </h1>
+    <p class="hero-sub">
+      PortBar lives in your menu bar and shows everything listening on your Mac —
+      which process, which project, and who started it: you, your editor, or an AI agent
+      running in the background. Stop anything in two clicks.
+    </p>
+    <div class="hero-cta">
+      <a href="#download" class="btn btn-primary">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path d="M10 14l-5-5h3V3h4v6h3l-5 5zm-7 2h14v2H3v-2z"/></svg>
+        Download for Mac
+      </a>
+      <a href="https://github.com/developer-pritam/port-bar" class="btn btn-outline" target="_blank" rel="noopener">
+        View source
+      </a>
+    </div>
+    <div class="hero-meta">
+      <span>~1 MB, native Swift</span>
+      <span>No permissions</span>
+      <span>No account, no tracking</span>
+    </div>
+  </div>
+
+  <div class="mockup-wrap" aria-hidden="true">
+    <div class="mockup-glow"></div>
+    <div class="desktop">
+      <div class="menubar">
+        <div class="mb-item mb-portbar">
+          <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
+            <rect x="1.9" y="3.3" width="14.2" height="11.4" rx="2.6" stroke="#fff" stroke-width="1.6"/>
+            <circle cx="6.05" cy="7.1" r="1.17" fill="#fff"/>
+            <circle cx="6.05" cy="10.9" r="1.17" fill="#fff"/>
+            <rect x="9" y="10.3" width="4.1" height="2.2" rx="0.7" fill="#fff"/>
+          </svg>
+          4
+        </div>
+        <div class="mb-item mb-hide">
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="#fff"><path d="M8 2.2c2.3 0 4.4.9 6 2.4l1.2-1.3A10.5 10.5 0 0 0 8 .4 10.5 10.5 0 0 0 .8 3.3L2 4.6a8.6 8.6 0 0 1 6-2.4zm0 3.4c1.4 0 2.7.5 3.6 1.4l1.3-1.3A7 7 0 0 0 8 3.8 7 7 0 0 0 3.1 5.7L4.4 7c1-.9 2.2-1.4 3.6-1.4zm0 3.3c-.5 0-1 .2-1.3.5L8 11l1.3-1.6c-.3-.3-.8-.5-1.3-.5z"/></svg>
+        </div>
+        <div class="mb-item mb-hide">
+          <svg width="24" height="12" viewBox="0 0 24 12" fill="none"><rect x="0.5" y="0.5" width="20" height="11" rx="3" stroke="#fff" stroke-opacity=".6"/><rect x="2" y="2" width="13" height="8" rx="1.6" fill="#fff"/><path d="M22 4v4c.7-.3 1.2-1.1 1.2-2s-.5-1.7-1.2-2z" fill="#fff" fill-opacity=".6"/></svg>
+        </div>
+        <div class="mb-item">Thu 2 Oct&nbsp; 10:42</div>
+      </div>
+
+      <div class="glass">
+        <div class="g-head">
+          <img src="assets/icon.png" alt="" />
+          <div>
+            <div class="g-title">Open Ports</div>
+            <div class="g-sub">5 ports · 4 processes</div>
+          </div>
+          <div class="g-btns"><i>↻</i><i>⋯</i></div>
+        </div>
+        <div class="g-search">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="m11 11 4 4"/></svg>
+          Search port, process or folder
+        </div>
+        <div class="g-chips">
+          <span class="g-chip on">All<b>4</b></span>
+          <span class="g-chip">Agents<b>2</b></span>
+          <span class="g-chip">Terminal<b>1</b></span>
+          <span class="g-chip">Services<b>1</b></span>
+        </div>
+
+        <div class="g-row">
+          <div class="g-port p-agent">3000</div>
+          <div class="g-info">
+            <div class="g-name">next-server <span class="g-net">network</span></div>
+            <div class="g-path">~/Code/shop-web</div>
+            <div class="g-meta"><span class="g-badge k-agent">✦ Claude Code</span> 2h 14m · 182 MB</div>
+          </div>
+          <div class="g-confirm">Stop</div>
+        </div>
+        <div class="g-row">
+          <div class="g-port p-term">5173</div>
+          <div class="g-info">
+            <div class="g-name">node</div>
+            <div class="g-path">~/Code/landing-page</div>
+            <div class="g-meta"><span class="g-badge k-term">▸ iTerm2</span> 25m · 64 MB</div>
+          </div>
+          <div class="g-stop"></div>
+        </div>
+        <div class="g-row">
+          <div class="g-port p-agent">8787</div>
+          <div class="g-info">
+            <div class="g-name">workerd</div>
+            <div class="g-path">~/Code/api-worker</div>
+            <div class="g-meta"><span class="g-badge k-agent">✦ Codex</span> 1d 3h · 41 MB</div>
+          </div>
+          <div class="g-stop"></div>
+        </div>
+        <div class="g-row">
+          <div class="g-port p-svc small">27017</div>
+          <div class="g-info">
+            <div class="g-name">mongod</div>
+            <div class="g-path">/opt/homebrew</div>
+            <div class="g-meta"><span class="g-badge k-svc">⚙ Background service</span> 35d 1h</div>
+          </div>
+          <div class="g-stop"></div>
+        </div>
+
+        <div class="g-foot">
+          <span>Updated 1s ago</span>
+          <b>Stop all 4 shown</b>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="full-divider"></div>
+
+<!-- ── Problem ───────────────────────────────────────────────────────────── -->
+<div class="problem">
+  <div class="terminal-line">
+    <span class="cmd">$ npm run dev</span><br />
+    <span class="err">Error: listen EADDRINUSE: address already in use :::3000</span>
+  </div>
+  <p>
+    Sound familiar? Between your terminals, your editor and the AI agents that spin up dev servers
+    and forget about them, ports pile up. <strong>PortBar shows you all of them — and who to blame.</strong>
+  </p>
+</div>
+
+<div class="full-divider"></div>
+
+<!-- ── Features ──────────────────────────────────────────────────────────── -->
+<div class="section" id="features">
+  <div class="section-label">Features</div>
+  <h2 class="section-title">Everything you need.<br /><span class="grad-text">Nothing you don't.</span></h2>
+
+  <div class="bento">
+    <div class="card wide">
+      <div class="glow" style="background:#8b5cf6"></div>
+      <div class="card-icon">🕵️</div>
+      <h3>Knows who started it</h3>
+      <p>
+        PortBar walks each process's parent chain — and when the launching shell is long gone, reads the
+        environment the server inherited — to tell you whether it came from you, your editor, or an AI
+        coding agent running in the background.
+      </p>
+      <div class="badges">
+        <span class="badge k-agent">Claude Code</span>
+        <span class="badge k-agent">Codex</span>
+        <span class="badge k-agent">Gemini CLI</span>
+        <span class="badge k-agent">Aider</span>
+        <span class="badge k-editor">VS Code</span>
+        <span class="badge k-editor">Cursor</span>
+        <span class="badge k-editor">Zed</span>
+        <span class="badge k-term">Terminal</span>
+        <span class="badge k-term">iTerm2</span>
+        <span class="badge k-term">Warp</span>
+        <span class="badge k-term">Ghostty</span>
+        <span class="badge k-svc">Docker</span>
+        <span class="badge k-svc">launchd</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="glow" style="background:#ef4444"></div>
+      <div class="card-icon">⏹️</div>
+      <h3>Stop in two clicks</h3>
+      <p>Click stop, click again to confirm. If a process ignores the polite request, PortBar offers a Force Kill.</p>
+      <div class="flow">
+        <span style="background:rgba(255,255,255,0.06)">■</span><span class="arrow">→</span>
+        <span style="background:rgba(239,68,68,0.9)">Stop</span><span class="arrow">→</span>
+        <span style="background:rgba(251,146,60,0.9)">Force Kill</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-icon">📁</div>
+      <h3>See the project</h3>
+      <p>Every port shows the folder it was started from. Jump to it in Finder or open it in your browser.</p>
+      <div class="mini-path">~/Code/shop-web</div>
+    </div>
+
+    <div class="card">
+      <div class="glow" style="background:#fb923c"></div>
+      <div class="card-icon">📡</div>
+      <h3>Spot exposed ports</h3>
+      <p>Servers listening on all interfaces get a <span style="color:var(--orange);font-weight:600">network</span> tag — anyone on your Wi-Fi can reach them.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-icon">🔢</div>
+      <h3>Live count in your menu bar</h3>
+      <p>Glance up to see how many ports are open. The list refreshes every few seconds while it's open.</p>
+    </div>
+
+    <div class="card">
+      <div class="glow" style="background:#0ea5e9"></div>
+      <div class="card-icon">🪶</div>
+      <h3>Tiny &amp; native</h3>
+      <p>Pure Swift and SwiftUI. No Electron, no runtime, no background daemon.</p>
+      <div class="stat-row">
+        <div class="stat"><b class="grad-text">~1 MB</b><span>download</span></div>
+        <div class="stat"><b class="grad-text">0</b><span>dependencies</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-icon">🔍</div>
+      <h3>Search &amp; filter</h3>
+      <p>Type a port, process or folder. Filter by Agents, Terminal, Editors or Services. System noise is hidden by default.</p>
+    </div>
+
+    <div class="card">
+      <div class="glow" style="background:#f472b6"></div>
+      <div class="card-icon">🫧</div>
+      <h3>Liquid Glass</h3>
+      <p>A frosted glass panel that drops from the menu bar — native Liquid Glass on macOS 26, light and dark.</p>
+    </div>
+  </div>
+</div>
+
+<div class="full-divider"></div>
+
+<!-- ── How it works ──────────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-label">How it works</div>
+  <h2 class="section-title">Three steps.<br /><span class="grad-text">That's it.</span></h2>
+  <div class="steps-wrap">
+    <div class="step">
+      <div class="step-num">1</div>
+      <h3>Install</h3>
+      <p>Download, unzip, drag PortBar to Applications and open it. It sits quietly in your menu bar — no Dock icon.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <h3>Click the icon</h3>
+      <p>See every open port with its process, project folder, uptime, memory and who launched it.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <h3>Stop what you don't need</h3>
+      <p>Free up port 3000 in two clicks — or clear out every forgotten dev server at once.</p>
+    </div>
+  </div>
+</div>
+
+<div class="full-divider"></div>
+
+<!-- ── Privacy ───────────────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-label">Privacy</div>
+  <h2 class="section-title">Zero permissions.<br /><span class="grad-text">Zero network.</span></h2>
+  <p class="section-sub">PortBar reads the same information as <code>lsof</code> and <code>ps</code> — nothing more.</p>
+  <div class="privacy-grid">
+    <div class="privacy-card">
+      <div class="pi">🔓</div>
+      <div>
+        <h3>No special access</h3>
+        <p>No Accessibility, no Screen Recording, no admin password. It can only stop processes that belong to you.</p>
+      </div>
+    </div>
+    <div class="privacy-card">
+      <div class="pi">🛡️</div>
+      <div>
+        <h3>Nothing leaves your Mac</h3>
+        <p>No network calls, no telemetry, no analytics, no account. Open source — read every line on GitHub.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="full-divider"></div>
+
+<!-- ── Download ──────────────────────────────────────────────────────────── -->
+<div class="section" id="download">
+  <div class="dl-section">
+    <img src="assets/icon.png" class="dl-icon" alt="PortBar" />
+    <div class="dl-title">Download PortBar</div>
+    <p class="dl-sub">Free, forever. No account. No strings attached.</p>
+
+    <div class="dl-btn-wrap">
+      <a href="https://github.com/developer-pritam/port-bar/releases/latest/download/PortBar.zip"
+         class="btn btn-primary" id="dl-btn">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path d="M10 14l-5-5h3V3h4v6h3l-5 5zm-7 2h14v2H3v-2z"/></svg>
+        Download PortBar (.zip)
+      </a>
+    </div>
+    <p class="dl-req">Requires macOS 14 Sonoma or later &nbsp;·&nbsp; Apple Silicon &amp; Intel</p>
+
+    <!-- Gatekeeper warning callout — shown after download click -->
+    <div class="gatekeeper-callout" id="gatekeeper-callout">
+      <div class="gk-header">
+        <span class="gk-icon">⚠️</span>
+        <strong>macOS will block the app on first launch — here's how to open it</strong>
+      </div>
+      <p class="gk-intro">
+        Because PortBar isn't from the App Store, macOS shows a security dialog.
+        You'll see <em>"PortBar.app Not Opened"</em> with <strong>Done</strong> and
+        <strong>Move to Bin</strong> buttons. <u>Do not click Move to Bin.</u>
+        Follow these steps instead:
+      </p>
+      <div class="gk-steps">
+        <div class="gk-step">
+          <div class="gk-n">1</div>
+          <div class="gk-text">Click <strong>Done</strong> to dismiss the dialog.</div>
+        </div>
+        <div class="gk-step">
+          <div class="gk-n">2</div>
+          <div class="gk-text">Open <strong>System Settings</strong> → <strong>Privacy &amp; Security</strong>.</div>
+        </div>
+        <div class="gk-step">
+          <div class="gk-n">3</div>
+          <div class="gk-text">
+            Scroll down to the <strong>Security</strong> section. You'll see:<br/>
+            <span class="gk-quote">"PortBar was blocked from use because it is not from an identified developer."</span><br/>
+            Click <strong>Open Anyway</strong>.
+          </div>
+        </div>
+        <div class="gk-step">
+          <div class="gk-n">4</div>
+          <div class="gk-text">
+            Enter your <strong>password</strong> or use <strong>Touch ID</strong> to confirm.
+            PortBar will launch. You only need to do this <strong>once</strong>.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="install-steps">
+      <div class="install-step">
+        <div class="install-n">1</div>
+        <div class="install-text"><strong>Unzip</strong> the downloaded file and move <strong>PortBar.app</strong> to your <strong>/Applications</strong> folder.</div>
+      </div>
+      <div class="install-step">
+        <div class="install-n">2</div>
+        <div class="install-text">
+          Launch PortBar. If macOS blocks it, go to <strong>System Settings → Privacy &amp; Security</strong> and click <strong>Open Anyway</strong>.
+          <a href="#gatekeeper-callout" class="gk-learn-more" onclick="document.getElementById('gatekeeper-callout').classList.add('visible');return false;">See step-by-step guide ↑</a>
+        </div>
+      </div>
+      <div class="install-step">
+        <div class="install-n">3</div>
+        <div class="install-text">Click the <strong>terminal icon</strong> in your menu bar — that's it. No permissions to grant.</div>
+      </div>
+      <div class="install-step">
+        <div class="install-n">4</div>
+        <div class="install-text">Optional: turn on <strong>Launch at login</strong> from the <strong>⋯</strong> menu so it's always there.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Footer ────────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="footer-left">
+    <img src="assets/icon.png" alt="PortBar" />
+    <span>
+      <strong>PortBar</strong> &nbsp;—&nbsp;
+      Made with ♥ by <a href="https://developerpritam.in" style="color:var(--sky)">Pritam</a>
+    </span>
+  </div>
+
+  <div class="footer-links">
+    <a href="https://developerpritam.in/donate" class="footer-link orange" target="_blank" rel="noopener">☕ Buy me a coffee</a>
+    <a href="https://developerpritam.in" class="footer-link blue" target="_blank" rel="noopener">🌐 Portfolio</a>
+    <a href="https://github.com/developer-pritam/port-bar" class="footer-link" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</footer>
+
+<script>
+  // Show the Gatekeeper guide as soon as the user clicks Download
+  (function () {
+    var btn = document.getElementById('dl-btn');
+    var callout = document.getElementById('gatekeeper-callout');
+    if (!btn || !callout) return;
+    btn.addEventListener('click', function () {
+      callout.classList.add('visible');
+      setTimeout(function () {
+        callout.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
+    });
+  })();
+</script>
+
+</body>
+</html>
