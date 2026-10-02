@@ -153,7 +153,7 @@ struct PanelView: View {
                 Toggle("Launch at login", isOn: Binding(get: { store.launchAtLogin }, set: { store.launchAtLogin = $0 }))
                 Divider()
                 Button("PortBar Website") { openURL("https://portbar.developerpritam.in") }
-                Button("Source on GitHub") { openURL("https://github.com/developer-pritam/port-bar") }
+                Button("Source on GitHub") { openURL("https://github.com/developer-pritam/mac-open-port") }
                 Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")")
                 Divider()
                 Button("Quit PortBar") { NSApp.terminate(nil) }
