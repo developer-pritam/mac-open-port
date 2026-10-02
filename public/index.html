@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Ports</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #16181d; --muted: #6b7280; --line: #e5e7eb; --hover: #f2f4f7;
+    --accent: #2563eb; --danger: #dc2626; --danger-bg: #fef2f2; --warn: #b45309; --warn-bg: #fffbeb;
+    --agent: #7c3aed; --agent-bg: #f3e8ff; --editor: #0369a1; --editor-bg: #e0f2fe;
+    --terminal: #15803d; --terminal-bg: #dcfce7; --container: #0e7490; --container-bg: #cffafe;
+    --service: #a16207; --service-bg: #fef9c3; --app: #475569; --app-bg: #f1f5f9;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1014; --panel: #161a20; --text: #e6e8eb; --muted: #8b93a1; --line: #262b33; --hover: #1d222a;
+      --accent: #60a5fa; --danger: #f87171; --danger-bg: #2a1416; --warn: #fbbf24; --warn-bg: #2a2110;
+      --agent: #c4b5fd; --agent-bg: #2a1f45; --editor: #7dd3fc; --editor-bg: #0c2a3d;
+      --terminal: #86efac; --terminal-bg: #10301c; --container: #67e8f9; --container-bg: #0b2e33;
+      --service: #fde047; --service-bg: #2e2a0d; --app: #cbd5e1; --app-bg: #222831;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 0 20px; }
+  .top { display: flex; align-items: center; gap: 16px; padding: 14px 0 10px; flex-wrap: wrap; }
+  h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
+  .stats { display: flex; gap: 14px; color: var(--muted); font-size: 13px; }
+  .stats b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .spacer { flex: 1; }
+  input[type=search] { width: 280px; max-width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
+  input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px; padding: 5px 10px; }
+  button:hover { background: var(--hover); }
+  button:disabled { opacity: .45; cursor: default; }
+  .filters { display: flex; gap: 6px; padding-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .chip { border-radius: 999px; padding: 3px 11px; font-size: 13px; }
+  .chip[aria-pressed=true] { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .chip .n { opacity: .6; margin-left: 4px; font-variant-numeric: tabular-nums; }
+  label.toggle { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; margin-left: 8px; cursor: pointer; }
+  .updated { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  main { padding: 16px 0 80px; }
+  .table { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; user-select: none; }
+  th[data-sort] { cursor: pointer; }
+  th[data-sort]:hover { color: var(--text); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr.row:hover { background: var(--hover); }
+  tbody tr.row { cursor: pointer; }
+  tr.selected { background: color-mix(in srgb, var(--accent) 8%, transparent) !important; }
+  .port { font: 600 15px var(--mono); font-variant-numeric: tabular-nums; }
+  .port a { color: var(--accent); text-decoration: none; }
+  .port a:hover { text-decoration: underline; }
+  .proc { min-width: 0; }
+  .proc .name { font-weight: 600; }
+  .proc .args { font: 12px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 340px; }
+  .cwd { font: 12px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; direction: rtl; text-align: left; }
+  .num { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; font-size: 13px; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .k-agent { color: var(--agent); background: var(--agent-bg); }
+  .k-editor { color: var(--editor); background: var(--editor-bg); }
+  .k-terminal { color: var(--terminal); background: var(--terminal-bg); }
+  .k-container { color: var(--container); background: var(--container-bg); }
+  .k-service { color: var(--service); background: var(--service-bg); }
+  .k-app, .k-system, .k-other { color: var(--app); background: var(--app-bg); }
+  .bind { font-size: 12px; white-space: nowrap; }
+  .bind.exposed { color: var(--warn); background: var(--warn-bg); padding: 1px 7px; border-radius: 999px; }
+  .bind.local { color: var(--muted); }
+  .actions { white-space: nowrap; text-align: right; }
+  .actions button { padding: 3px 9px; font-size: 13px; }
+  .btn-stop { color: var(--danger); }
+  .btn-stop.confirm, .btn-force.confirm { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .btn-force { color: var(--muted); }
+  .shared { font-size: 11px; color: var(--muted); }
+  .detail td { background: var(--hover); padding: 12px 16px 14px 46px; }
+  .detail dl { display: grid; grid-template-columns: 120px 1fr; gap: 6px 14px; margin: 0; font-size: 13px; }
+  .detail dt { color: var(--muted); }
+  .detail dd { margin: 0; font: 12px var(--mono); word-break: break-all; }
+  .detail .chain span { white-space: nowrap; }
+  .empty { padding: 48px; text-align: center; color: var(--muted); }
+  input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+
+  .bulk { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--bg); border-radius: 12px; padding: 8px 8px 8px 16px; display: none; align-items: center; gap: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.25); z-index: 10; }
+  .bulk.show { display: flex; }
+  .bulk button { background: transparent; color: var(--bg); border-color: color-mix(in srgb, var(--bg) 30%, transparent); }
+  .bulk button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .toasts { position: fixed; right: 20px; top: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 20; }
+  .toast { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 9px 14px; max-width: 420px; box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 13px; }
+  .toast.err { border-left-color: var(--danger); }
+
+  @media (max-width: 900px) {
+    .col-cwd, .col-mem, .col-up, .col-pid { display: none; }
+    .proc .args { max-width: 220px; }
+    input[type=search] { width: 100%; }
+    .wrap { padding: 0 16px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <h1>Open Ports</h1>
+      <div class="stats" id="stats"></div>
+      <div class="spacer"></div>
+      <input type="search" id="q" placeholder="Filter by port, process, folder…  ( / )" autocomplete="off">
+      <button id="refresh" title="Refresh (r)">Refresh</button>
+    </div>
+    <div class="filters" id="filters"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="table">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:36px"><input type="checkbox" id="all" aria-label="Select all"></th>
+          <th data-sort="port">Port</th>
+          <th data-sort="name">Process</th>
+          <th data-sort="launcher">Launched by</th>
+          <th class="col-cwd" data-sort="cwd">Folder</th>
+          <th class="col-pid" data-sort="pid">PID</th>
+          <th class="col-up" data-sort="uptimeSec">Uptime</th>
+          <th class="col-mem" data-sort="memMb">Mem</th>
+          <th>Bind</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+
+<div class="bulk" id="bulk">
+  <span id="bulkText"></span>
+  <button id="bulkClear">Clear</button>
+  <button id="bulkStop" class="danger">Stop</button>
+  <button id="bulkForce">Force kill</button>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+const KINDS = [
+  ['all', 'All'], ['agent', 'Agents'], ['terminal', 'Terminal'], ['editor', 'Editors'],
+  ['container', 'Containers'], ['service', 'Services'], ['app', 'Apps'], ['system', 'macOS'], ['other', 'Other'],
+];
+const state = {
+  data: null, kind: 'all', q: '', sort: 'port', dir: 1, hideNoise: true,
+  selected: new Set(), open: new Set(), confirm: null,
+};
+try { state.hideNoise = localStorage.getItem('hideNoise') !== '0'; } catch {}
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ago = (s) => s == null ? '' : s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h ${Math.floor(s % 3600 / 60)}m` : `${Math.floor(s / 86400)}d ${Math.floor(s % 86400 / 3600)}h`;
+const home = (p) => p.replace(/^\/Users\/[^/]+/, '~');
+const isNoise = (r) => ['app', 'system'].includes(r.launchedBy.kind) || /Helper/.test(r.name);
+
+async function load() {
+  try {
+    const res = await fetch('/api/ports', { cache: 'no-store' });
+    state.data = await res.json();
+    // Drop selections for processes that are gone.
+    const live = new Set(state.data.ports.map((p) => p.pid));
+    for (const pid of state.selected) if (!live.has(pid)) state.selected.delete(pid);
+    render();
+  } catch (e) {
+    toast('Could not reach the dashboard server — is it still running?', true);
+  }
+}
+
+function visible() {
+  if (!state.data) return [];
+  const q = state.q.toLowerCase();
+  let rows = state.data.ports.filter((r) => {
+    if (state.kind !== 'all' && r.launchedBy.kind !== state.kind) return false;
+    if (state.hideNoise && state.kind === 'all' && isNoise(r)) return false;
+    if (!q) return true;
+    return [r.port, r.pid, r.name, r.args, r.cwd, r.launchedBy.label, r.user].join(' ').toLowerCase().includes(q);
+  });
+  const key = state.sort;
+  const val = (r) => key === 'launcher' ? r.launchedBy.label : r[key] ?? '';
+  rows.sort((a, b) => {
+    const x = val(a), y = val(b);
+    return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))) * state.dir || a.port - b.port;
+  });
+  return rows;
+}
+
+function render() {
+  const all = state.data.ports;
+  const rows = visible();
+  const pidsByPort = new Map();
+  for (const r of all) pidsByPort.set(r.pid, [...(pidsByPort.get(r.pid) || []), r.port]);
+
+  $('stats').innerHTML = `
+    <span><b>${all.length}</b> ports</span>
+    <span><b>${pidsByPort.size}</b> processes</span>
+    <span><b>${all.filter((r) => r.exposed).length}</b> exposed to network</span>
+    <span class="updated" id="updated"></span>`;
+  stamp();
+
+  const counts = {};
+  for (const r of all) counts[r.launchedBy.kind] = (counts[r.launchedBy.kind] || 0) + 1;
+  $('filters').innerHTML = KINDS
+    .filter(([k]) => k === 'all' || counts[k])
+    .map(([k, label]) => `<button class="chip" data-kind="${k}" aria-pressed="${state.kind === k}">${label}<span class="n">${k === 'all' ? all.length : counts[k]}</span></button>`)
+    .join('') + `<label class="toggle"><input type="checkbox" id="noise" ${state.hideNoise ? 'checked' : ''}> Hide macOS &amp; app helper ports in “All”</label>`;
+
+  document.querySelectorAll('th[data-sort]').forEach((th) => {
+    th.textContent = th.textContent.replace(/ [↑↓]$/, '') + (th.dataset.sort === state.sort ? (state.dir > 0 ? ' ↑' : ' ↓') : '');
+  });
+
+  if (!rows.length) {
+    $('rows').innerHTML = `<tr><td colspan="10" class="empty">${state.q ? 'No ports match your filter.' : 'Nothing listening here.'}</td></tr>`;
+  } else {
+    $('rows').innerHTML = rows.map((r) => {
+      const lb = r.launchedBy;
+      const others = pidsByPort.get(r.pid).filter((p) => p !== r.port);
+      const sel = state.selected.has(r.pid);
+      const key = `${r.pid}:${r.port}`;
+      const c = state.confirm;
+      const confirmStop = c && c.pid === r.pid && !c.force;
+      const confirmForce = c && c.pid === r.pid && c.force;
+      const main = `
+        <tr class="row ${sel ? 'selected' : ''}" data-key="${key}" data-pid="${r.pid}">
+          <td><input type="checkbox" data-select="${r.pid}" ${sel ? 'checked' : ''} ${r.self ? 'disabled' : ''} aria-label="Select pid ${r.pid}"></td>
+          <td class="port"><a href="http://localhost:${r.port}" target="_blank" rel="noopener" title="Open http://localhost:${r.port}">${r.port}</a></td>
+          <td class="proc">
+            <div class="name">${esc(r.name)}${r.self ? ' <span class="shared">(this dashboard)</span>' : ''}</div>
+            <div class="args" title="${esc(r.args)}">${esc(r.args)}</div>
+          </td>
+          <td><span class="badge k-${lb.kind}" title="${esc(lb.chain.map((p) => p.name).join(' ← '))}">${esc(lb.label)}</span></td>
+          <td class="col-cwd"><div class="cwd" title="${esc(r.cwd)}">&lrm;${esc(home(r.cwd))}</div></td>
+          <td class="col-pid num">${r.pid}</td>
+          <td class="col-up num" title="started ${r.uptimeSec != null ? new Date(Date.now() - r.uptimeSec * 1000).toLocaleString() : ''}">${ago(r.uptimeSec)}</td>
+          <td class="col-mem num">${r.memMb != null ? r.memMb + ' MB' : ''}</td>
+          <td>${r.exposed ? '<span class="bind exposed" title="Reachable from other devices on your network">network</span>' : '<span class="bind local">local</span>'}</td>
+          <td class="actions">
+            ${r.self ? '' : `
+              <button class="btn-stop ${confirmStop ? 'confirm' : ''}" data-stop="${r.pid}" title="Send SIGTERM (graceful)">${confirmStop ? 'Confirm' : 'Stop'}</button>
+              <button class="btn-force ${confirmForce ? 'confirm' : ''}" data-force="${r.pid}" title="Send SIGKILL (immediate)">${confirmForce ? 'Confirm' : 'Kill -9'}</button>
+              ${others.length ? `<div class="shared">also frees ${others.slice(0, 4).join(', ')}${others.length > 4 ? '…' : ''}</div>` : ''}`}
+          </td>
+        </tr>`;
+      if (!state.open.has(key)) return main;
+      return main + `
+        <tr class="detail"><td colspan="10"><dl>
+          <dt>Command</dt><dd>${esc(r.args)}</dd>
+          <dt>Executable</dt><dd>${esc(r.exe)}</dd>
+          <dt>Folder</dt><dd>${esc(r.cwd || '—')}</dd>
+          <dt>Listening on</dt><dd>${r.addresses.map((a) => esc(a) + ':' + r.port).join('   ')}</dd>
+          <dt>User / PID / PPID</dt><dd>${esc(r.user)} / ${r.pid} / ${r.ppid ?? '—'}</dd>
+          <dt>CPU</dt><dd>${r.cpu ?? '—'}%</dd>
+          <dt>Launcher via</dt><dd>${esc(lb.source)}</dd>
+          <dt>Parent chain</dt><dd class="chain">${lb.chain.length ? lb.chain.map((p) => `<span>${esc(p.name)} (${p.pid})</span>`).join(' ← ') : '—'}</dd>
+          ${others.length ? `<dt>Same process</dt><dd>also listening on ${others.join(', ')}</dd>` : ''}
+        </dl></td></tr>`;
+    }).join('');
+  }
+
+  const selectable = rows.filter((r) => !r.self).map((r) => r.pid);
+  $('all').checked = selectable.length > 0 && selectable.every((p) => state.selected.has(p));
+  $('all').indeterminate = !$('all').checked && selectable.some((p) => state.selected.has(p));
+
+  const n = state.selected.size;
+  $('bulk').classList.toggle('show', n > 0);
+  $('bulkText').textContent = `${n} process${n === 1 ? '' : 'es'} selected`;
+}
+
+function stamp() {
+  const el = $('updated');
+  if (el && state.data) el.textContent = `updated ${Math.round((Date.now() - state.data.generatedAt) / 1000)}s ago`;
+}
+
+async function kill(pids, force) {
+  const res = await fetch('/api/kill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Port-Dashboard': '1' },
+    body: JSON.stringify({ pids, force }),
+  });
+  const { results = [], error } = await res.json();
+  if (error) return toast(error, true);
+  for (const r of results) {
+    const proc = state.data.ports.find((p) => p.pid === r.pid);
+    const label = proc ? `${proc.name} (pid ${r.pid})` : `pid ${r.pid}`;
+    if (!r.ok) toast(`${label}: ${r.error}`, true);
+    else if (r.exited) toast(`Stopped ${label}`);
+    else toast(`${label} is still running after SIGTERM — use Kill -9 to force it.`, true);
+    state.selected.delete(r.pid);
+  }
+  await load();
+}
+
+function toast(msg, err) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (err ? ' err' : '');
+  el.textContent = msg;
+  $('toasts').appendChild(el);
+  setTimeout(() => el.remove(), err ? 7000 : 3500);
+}
+
+// Two-step confirm on the row buttons instead of a modal: first click arms, second click fires.
+let confirmTimer;
+function arm(pid, force) {
+  const c = state.confirm;
+  if (c && c.pid === pid && c.force === force) {
+    state.confirm = null;
+    clearTimeout(confirmTimer);
+    return kill([pid], force);
+  }
+  state.confirm = { pid, force };
+  clearTimeout(confirmTimer);
+  confirmTimer = setTimeout(() => { state.confirm = null; render(); }, 3000);
+  render();
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.dataset.stop) return arm(Number(t.dataset.stop), false);
+  if (t.dataset.force) return arm(Number(t.dataset.force), true);
+  if (t.dataset.select) {
+    const pid = Number(t.dataset.select);
+    t.checked ? state.selected.add(pid) : state.selected.delete(pid);
+    return render();
+  }
+  if (t.dataset.kind) { state.kind = t.dataset.kind; return render(); }
+  if (t.id === 'noise') {
+    state.hideNoise = t.checked;
+    try { localStorage.setItem('hideNoise', t.checked ? '1' : '0'); } catch {}
+    return render();
+  }
+  if (t.id === 'all') {
+    const pids = visible().filter((r) => !r.self).map((r) => r.pid);
+    pids.forEach((p) => t.checked ? state.selected.add(p) : state.selected.delete(p));
+    return render();
+  }
+  const th = t.closest('th[data-sort]');
+  if (th) {
+    state.dir = state.sort === th.dataset.sort ? -state.dir : 1;
+    state.sort = th.dataset.sort;
+    return render();
+  }
+  const row = t.closest('tr.row');
+  if (row && !t.closest('a, button, input')) {
+    const k = row.dataset.key;
+    state.open.has(k) ? state.open.delete(k) : state.open.add(k);
+    render();
+  }
+});
+
+$('q').addEventListener('input', (e) => { state.q = e.target.value; render(); });
+$('refresh').addEventListener('click', load);
+$('bulkClear').addEventListener('click', () => { state.selected.clear(); render(); });
+$('bulkStop').addEventListener('click', () => kill([...state.selected], false));
+$('bulkForce').addEventListener('click', () => {
+  if (confirm(`Force kill (SIGKILL) ${state.selected.size} process(es)? They won't get a chance to clean up.`)) kill([...state.selected], true);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') { if (e.key === 'Escape') e.target.blur(); return; }
+  if (e.key === '/') { e.preventDefault(); $('q').focus(); }
+  if (e.key === 'r') load();
+});
+
+load();
+// Poll while the tab is visible; pause in the background.
+setInterval(() => { if (!document.hidden && !state.confirm) load(); }, 3000);
+setInterval(stamp, 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "mac-open-port",
+  "version": "1.0.0",
+  "description": "Local dashboard to see which ports are open on your Mac, who started them, and stop them.",
+  "main": "server.js",
+  "bin": { "ports": "server.js" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT"
+}
