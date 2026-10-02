@@ -48,8 +48,8 @@ To uninstall: choose **Quit PortBar** from the `⋯` menu, then move `PortBar.ap
 **Prerequisites:** Xcode 15+ or the Xcode command line tools (`xcode-select --install`). No Xcode project needed — it's a Swift package.
 
 ```bash
-git clone https://github.com/developer-pritam/port-bar.git
-cd port-bar
+git clone https://github.com/developer-pritam/mac-open-port.git
+cd mac-open-port
 ./build.sh install     # build, copy to /Applications, launch
 ```
 
